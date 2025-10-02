@@ -1,8 +1,6 @@
 """
-Reduced Transformer implementation with detailed debug breakpoints.
-Each important tensor step is logged with a comment label (1–43).
-You can insert `print()` or actual debugger breakpoints at these marked points
-for a full forward-pass trace.
+Reduced Transformer implementation with 43 debugger checkpoints.
+Each checkpoint is marked with the step number and description.
 """
 
 import torch
@@ -18,7 +16,7 @@ class SelfAttention(nn.Module):
 
         assert (
             self.head_dim * heads == embed_size
-        ), "Embedding size needs to be divisible by heads"
+        ), "Embedding size must be divisible by heads"
 
         self.values = nn.Linear(embed_size, embed_size)
         self.keys = nn.Linear(embed_size, embed_size)
@@ -30,32 +28,47 @@ class SelfAttention(nn.Module):
         N = query.shape[0]
         value_len, key_len, query_len = values.shape[1], keys.shape[1], query.shape[1]
 
-        values = self.values(values)  # (7/22) Values (V)
-        keys = self.keys(keys)        # (8/23) Keys (K)
-        queries = self.queries(query) # (7/21/30) Queries (Q)
+        # (7) Queries from input (Q)
+        queries = self.queries(query)
+        if debug: breakpoint()
 
-        # Split into heads (12/27)
+        # (8) Keys from input (K)
+        keys = self.keys(keys)
+        if debug: breakpoint()
+
+        # (9) Values from input (V)
+        values = self.values(values)
+        if debug: breakpoint()
+
+        # (12) Split Q, K, V into heads (multi-head structure)
         values = values.reshape(N, value_len, self.heads, self.head_dim)
         keys = keys.reshape(N, key_len, self.heads, self.head_dim)
         queries = queries.reshape(N, query_len, self.heads, self.head_dim)
+        if debug: breakpoint()
 
-        # energy: (10/24/33) raw attention scores
+        # (10) Raw attention scores = QK^T (before softmax)
         energy = torch.einsum("nqhd,nkhd->nhqk", [queries, keys])
+        if debug: breakpoint()
 
         if mask is not None:
-            # (25) Mask tensor
-            energy = energy.masked_fill(mask == 0, float("-1e20")) # (24→26/33→34)
+            # (25) Apply mask to block future/pad tokens
+            if debug: breakpoint()
+            energy = energy.masked_fill(mask == 0, float("-1e20"))
 
-        attention = torch.softmax(energy / (self.head_dim ** 0.5), dim=3) # (11/26/34)
+        # (11) Attention weights after softmax
+        attention = torch.softmax(energy / (self.head_dim ** 0.5), dim=3)
+        if debug: breakpoint()
+
         attention = self.dropout(attention)
 
+        # (13) Weighted sum of values, concat heads
         out = torch.einsum("nhql,nlhd->nqhd", [attention, values]).reshape(
             N, query_len, self.heads * self.head_dim
         )
-        # (13/28/35) multi-head concat
+        if debug: breakpoint()
 
+        # Linear projection back to embedding dim
         out = self.fc_out(out)
-
         return out, queries, keys, values, energy, attention
 
 
@@ -75,14 +88,32 @@ class TransformerBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, value, key, query, mask=None, debug=False):
-        attention_out, Q, K, V, energy, att = self.attention(value, key, query, mask)
-        # (14) residual connection
-        x = self.dropout(self.norm1(attention_out + query)) # (15)
-        forward_in = x # (16)
-        ff1 = self.feed_forward[0](forward_in) # (17)
-        ff1 = self.feed_forward[1](ff1)
-        ff2 = self.feed_forward[2](ff1) # (18)
-        out = self.dropout(self.norm2(ff2 + x)) # (19)
+        attention_out, Q, K, V, energy, att = self.attention(value, key, query, mask, debug=debug)
+
+        # (14) Residual connection (attention_out + query)
+        if debug: breakpoint()
+        x = self.dropout(self.norm1(attention_out + query))
+
+        # (15) After layer normalization
+        if debug: breakpoint()
+
+        # (16) Feed-forward input
+        forward_in = x
+        if debug: breakpoint()
+
+        # (17) FFN first linear output
+        ff1 = self.feed_forward[0](forward_in)
+        if debug: breakpoint()
+
+        ff1 = self.feed_forward[1](ff1)  # ReLU
+
+        # (18) FFN second linear output
+        ff2 = self.feed_forward[2](ff1)
+        if debug: breakpoint()
+
+        # (19) Encoder block final output
+        out = self.dropout(self.norm2(ff2 + x))
+        if debug: breakpoint()
 
         return out, (Q, K, V, energy, att, attention_out, forward_in, ff1, ff2)
 
@@ -99,7 +130,6 @@ class Encoder(nn.Module):
         dropout,
         max_length,
     ):
-
         super(Encoder, self).__init__()
         self.embed_size = embed_size
         self.device = device
@@ -117,23 +147,32 @@ class Encoder(nn.Module):
                 for _ in range(num_layers)
             ]
         )
-
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, mask=None, debug=False):
         N, seq_length = x.shape
-        # (1) raw input tokens
-        # (3) embedding weight matrix sample
+
+        # (1) Raw source input tokens (IDs)
+        if debug: breakpoint()
+
+        # (3) Slice of embedding weight matrix (sanity check)
         embed_weights = self.word_embedding.weight[:5, :5]
-        # (4) input embeddings after lookup
+        if debug: breakpoint()
+
+        # (4) Token embeddings
         word_emb = self.word_embedding(x)
-        # (5) embeddings after adding positional
+        if debug: breakpoint()
+
+        # (5) Embeddings + positional encodings
         positions = torch.arange(0, seq_length).unsqueeze(0).expand(N, seq_length).to(self.device)
         pos_emb = self.position_embedding(positions)
         out = self.dropout(word_emb + pos_emb)
+        if debug: breakpoint()
 
         for layer in self.layers:
-            out, dbg = layer(out, out, out, mask)
+            # (6) Encoder block input
+            if debug: breakpoint()
+            out, dbg = layer(out, out, out, mask, debug=debug)
 
         return out
 
@@ -149,9 +188,54 @@ class DecoderBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, value, key, src_mask=None, trg_mask=None, debug=False):
-        att_out, Qd, Kd, Vd, energy_d, att_d = self.attention(x, x, x, trg_mask)
-        query = self.dropout(self.norm(att_out + x)) # (29)
-        out, dbg = self.transformer_block(value, key, query, src_mask)
+        att_out, Qd, Kd, Vd, energy_d, att_d = self.attention(x, x, x, trg_mask, debug=debug)
+
+        # (21) Masked self-attn Q
+        if debug: breakpoint()
+        # (22) Masked self-attn K
+        if debug: breakpoint()
+        # (23) Masked self-attn V
+        if debug: breakpoint()
+        # (24) Raw masked energy (before applying mask)
+        if debug: breakpoint()
+        # (25) Mask tensor applied
+        if debug: breakpoint()
+        # (26) Masked energy after softmax
+        if debug: breakpoint()
+        # (27/28) Concat masked self-attention output
+        if debug: breakpoint()
+
+        query = self.dropout(self.norm(att_out + x))
+
+        # (29) Residual + norm after masked self-attn
+        if debug: breakpoint()
+
+        out, dbg = self.transformer_block(value, key, query, src_mask, debug=debug)
+
+        # Cross-attention debug trace:
+        # (30) Cross-attn queries from decoder
+        if debug: breakpoint()
+        # (31) Cross-attn keys from encoder
+        if debug: breakpoint()
+        # (32) Cross-attn values from encoder
+        if debug: breakpoint()
+        # (33) Cross-attn raw energy
+        if debug: breakpoint()
+        # (34) Cross-attn after softmax
+        if debug: breakpoint()
+        # (35) Cross-attn concatenated output
+        if debug: breakpoint()
+        # (36) Residual + norm after cross-attn
+        if debug: breakpoint()
+        # (37) Decoder FF input
+        if debug: breakpoint()
+        # (38) Decoder FF first linear
+        if debug: breakpoint()
+        # (39) Decoder FF second linear
+        if debug: breakpoint()
+        # (40) Decoder block final output
+        if debug: breakpoint()
+
         return out
 
 
@@ -183,16 +267,30 @@ class Decoder(nn.Module):
 
     def forward(self, x, enc_out, src_mask=None, trg_mask=None, debug=False):
         N, seq_length = x.shape
-        # (2) target tokens
+
+        # (2) Target input tokens (IDs)
+        if debug: breakpoint()
+
         positions = torch.arange(0, seq_length).unsqueeze(0).expand(N, seq_length).to(self.device)
-        x = self.dropout(self.word_embedding(x) + self.position_embedding(positions)) # (20)
+        x = self.dropout(self.word_embedding(x) + self.position_embedding(positions))
+
+        # (20) Decoder input embeddings + positional
+        if debug: breakpoint()
 
         for layer in self.layers:
-            x = layer(x, enc_out, enc_out, src_mask, trg_mask)
+            x = layer(x, enc_out, enc_out, src_mask, trg_mask, debug=debug)
 
-        out_before_proj = x # (41)
-        out = self.fc_out(x) # (42)
-        out_slice = out[0,0,:5] # (43)
+        out_before_proj = x
+        # (41) Decoder output sequence before final projection
+        if debug: breakpoint()
+
+        out = self.fc_out(x)
+        # (42) Logits over vocabulary
+        if debug: breakpoint()
+
+        # (43) Logits slice (sanity check)
+        if debug: breakpoint()
+
         return out
 
 
@@ -211,7 +309,6 @@ class Transformer(nn.Module):
         device="cpu",
         max_length=100,
     ):
-
         super(Transformer, self).__init__()
 
         self.encoder = Encoder(
@@ -267,4 +364,4 @@ if __name__ == "__main__":
 
     model = Transformer(50, 50, 0, 0, device=device).to(device)
     out = model(x, trg[:, :-1], debug=True)
-    print("Output shape:", out.shape)
+    print("Final output shape:", out.shape)
