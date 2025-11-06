@@ -1,1 +1,61 @@
+# SeqTrack: Custom Training & Evaluation on LaSOT
 
+This repository houses a modified implementation of the [SeqTrack](https://www.google.com/search?q=https://github.com/Microsoft/SeqTrack) visual tracker. It's tailored for specific training phases and a restricted evaluation on a subset of the **LaSOT** dataset ('coin' and 'mouse' classes). This work fulfills requirements for **Assignment 3 & 4**, focusing on multi-phase training, checkpoint management, and custom inference.
+
+## 🎯 Goals
+
+  * Train SeqTrack-B256 on a LaSOT subset.
+  * **Phase 1:** Epochs 1-10.
+  * **Phase 2:** Resume from Epoch 3, train to Epoch 13.
+  * **Restricted Inference:** Evaluate strictly on 8 sequences: `coin-3`, `coin-6`, `coin-7`, `coin-18`, `mouse-1`, `mouse-8`, `mouse-9`, `mouse-17`.
+  * Generate AUC/Precision metrics and graphs.
+
+## 🛠️ Key Modifications
+
+| File | Modification |
+| :--- | :--- |
+| `lib/test/evaluation/lasotdataset.py` | Hardcoded filter to restrict testing to the 8 target sequences. |
+| `experiments/seqtrack/seqtrack_b256.yaml` | Configured for multi-phase training (custom `RESUME` paths, `EPOCH` limits). |
+| `lib/train/train_script.py` | Patched `load_checkpoint` for specific paths and PyTorch 2.6+ compatibility. |
+| `run_inference_phase2.sh` | Custom script for automated batch inference (Epochs 10-13) with optimized settings. |
+
+## 🚀 Setup
+
+```bash
+conda activate seqtrack
+export PYTHONPATH=$(pwd):$PYTHONPATH
+```
+
+## 🏋️‍♀️ Workflow
+
+**Phase 1 Training (Epochs 1-9):**
+
+```bash
+python -m lib.train.run_training --script seqtrack --config seqtrack_b256 --save_dir ./phase1_checkpoints
+```
+
+**Phase 2 Training (Epochs 10-13):**
+*Update `seqtrack_b256.yaml` with `TRAIN.RESUME` path before running.*
+
+```bash
+python -m lib.train.run_training --script seqtrack --config seqtrack_b256 --save_dir ./phase2_extension
+```
+
+## 🔍 Evaluation
+
+**Run Inference:**
+
+```bash
+chmod +x run_inference_phase2.sh
+./run_inference_phase2.sh
+```
+
+**Run Analysis:**
+
+```bash
+python analyze_results.py
+```
+
+## 📝 Credits
+
+Based on [SeqTrack](https://www.google.com/search?q=https://github.com/Microsoft/SeqTrack) ([Paper](https://arxiv.org/abs/2303.16354)).
