@@ -83,9 +83,6 @@ Design & Implementation Notes
 │  │  ├─ dct_block.py
 │  │  ├─ wavelet.py
 │  │  └─ bitplane.py
-│  └─ utils.py        # helpers, kernels, metrics
-├─ tests/             # unit tests for key modules
-└─ examples/          # example input images and sample outputs
 ```
 
 ## Requirements
