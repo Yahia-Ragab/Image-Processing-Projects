@@ -97,10 +97,42 @@ Design & Implementation Notes
 Example `requirements.txt` entries:
 
 ```
-numpy>=1.25
-pillow>=10.0
-matplotlib>=3.8
-pygobject>=3.40  # or PyQt5==5.15.9 if using PyQt
+attr==0.3.2
+charset_normalizer==3.3.2
+ConfigParser==7.2.0
+cryptography==46.0.3
+Cython==3.2.1
+dl==0.1.0
+docutils==0.22.3
+filelock==3.20.0
+HTMLParser==0.0.2
+hypothesis==6.148.2
+ipython==9.7.0
+ipywidgets==8.1.8
+Jinja2==3.1.6
+jnius==1.1.0
+keyring==25.6.0
+mtrand==0.1
+mypy==1.18.2
+numarray==1.5.1
+Numeric==24.2
+pickle5==0.0.12
+protobuf==6.33.1
+psutil==7.1.3
+PyInstaller==6.17.0
+pyOpenSSL==25.3.0
+pytest==9.0.1
+pytz==2025.2
+PyYAML==6.0.3
+railroad==0.5.0
+redis==7.1.0
+scipy_doctest==2.0.1
+Sphinx==8.2.3
+thread==2.0.5
+threadpoolctl==3.6.0
+trove_classifiers==2025.11.14.15
+urllib3_secure_extra==0.1.0
+xmlrpclib==1.0.1
 ```
 
 ## How to run
@@ -111,8 +143,8 @@ pygobject>=3.40  # or PyQt5==5.15.9 if using PyQt
 2. Install dependencies:
    pip install -r requirements.txt
 3. Launch the app:
-   python main.py
-   The GUI will open; click "Upload Image" to start and use grouped buttons to apply operations. Results show dynamically in the right pane, with options to save.
+   python gui.py
+   The GUI will open; click "Upload Image" or drag and drop to start and use grouped buttons to apply operations. Results show dynamically in the right pane, with options to save.
 
 ## Examples and Usage
 
