@@ -1,9 +1,5 @@
 # Image Processing Project
 
-Team No.: ( )
-Team Members:
-ID | Name | Grade
-
 ## Project Summary
 
 A Python 3.11 object-oriented image processing application with a graphical user interface (GUI) that implements the operations and compression techniques listed in the project specification. All core algorithms are implemented from basic operations (filters, sums, min/max, median, etc.) rather than relying on single built-in "do-it-all" functions. The GUI groups related operations, supports image upload and live result display, and includes extra usability features.
@@ -127,31 +123,8 @@ pygobject>=3.40  # or PyQt5==5.15.9 if using PyQt
 * Use "Resize (Bicubic)" with a factor of 2 to demonstrate bicubic interpolation.
 * Try "Compress -> Huffman" to encode and then decode; compare original vs reconstructed PSNR printed in the status bar.
 
-## Tests
-
-* Unit tests for core algorithms are under `tests/`. Run:
-  pytest -q
-
 ## Grading & Deliverables Notes
 
 * The README documents which member implemented which module (add names/IDs in the Team section).
 * Include answers to project questions for each team member in `docs/` or append as `TEAM_QUESTIONS.md` (this portion is graded separately).
 * Part of the grade depends on the correctness of algorithmic implementations and another on the GUI usability and aesthetics.
-
-## Future Work and Enhancements
-
-* GPU acceleration for large filter kernels.
-* Interactive histogram sliders for live contrast adjustment.
-* Improved arithmetic coder with adaptive models.
-* Export compressed bitstreams with a custom viewer.
-
-## License
-
-Specify your license here (e.g., MIT). Example:
-This project is released under the MIT License — see LICENSE.md.
-
-## Contact
-
-For questions or collaboration, contact: [your.email@example.com](mailto:your.email@example.com)
-
-Note: I interpreted "gt6" as GTK6 for the GUI toolkit. If you used a different GUI library (e.g., PyQt5) or want the README tailored for a particular backend, tell me which one and I will update the README accordingly.
