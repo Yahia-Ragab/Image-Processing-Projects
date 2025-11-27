@@ -11,6 +11,7 @@ from transformation import Transformation
 from resize import Resize
 from info import Info
 from analysis import Analysis
+from compress import Compress
 
 class ImageDropWindow(QWidget):
     def __init__(self):
@@ -23,6 +24,8 @@ class ImageDropWindow(QWidget):
         self.filtered_img = None
         self.transformed_img = None
         self.resized_img = None
+        self.compressed_data = None
+        self.compression_method = None
         
         self.last_filter_choice = "None"
         self.last_filter_params = {}
@@ -124,6 +127,26 @@ class ImageDropWindow(QWidget):
         self.info_display.setMaximumHeight(200)
         self.info_display.setPlaceholderText("Image info will appear here")
         self.menu_layout.addWidget(self.info_display)
+
+        self.compress_label = QLabel("Compression")
+        self.menu_layout.addWidget(self.compress_label)
+
+        self.combo_compress = QComboBox()
+        self.combo_compress.addItems([
+            "None", "Huffman", "Golomb-Rice", "Arithmetic", "LZW", 
+            "RLE", "Symbol-Based", "Bit-Plane", "DCT", "Predictive", "Wavelet"
+        ])
+        self.combo_compress.currentTextChanged.connect(self.show_compress_inputs)
+        self.menu_layout.addWidget(self.combo_compress)
+
+        self.compress_input1 = QLineEdit()
+        self.compress_input1.setPlaceholderText("Param 1")
+        self.compress_input1.hide()
+        self.menu_layout.addWidget(self.compress_input1)
+
+        self.apply_compress_btn = QPushButton("Apply Compression")
+        self.apply_compress_btn.clicked.connect(self.apply_compression)
+        self.menu_layout.addWidget(self.apply_compress_btn)
 
         self.save_btn = QPushButton("Save Image")
         self.save_btn.clicked.connect(self.save_image)
@@ -512,32 +535,35 @@ class ImageDropWindow(QWidget):
             channels = info.get_channel()
 
             info_text = f"""IMAGE INFORMATION
-            Resolution: {width} x {height}
-            File Size: {size} MB
-            Type: {file_type}
-            Channels: {channels}
+━━━━━━━━━━━━━━━━━━━━
+Resolution: {width} x {height}
+File Size: {size} MB
+Type: {file_type}
+Channels: {channels}
 
-            """
+"""
 
             if choice == "Threshold Analysis":
                 result = a.compute_threshold()
-                info_text += f"""THRESHOLD ANALYSIS:
-                Average Threshold: {result['average_threshold']:.2f}
-                Otsu Threshold: {result['otsu_threshold']:.2f}
-                Difference: {result['difference']:.2f}
-                Optimal: {"Yes" if result['is_optimal'] else "No"}
-                """
+                info_text += f"""THRESHOLD ANALYSIS
+━━━━━━━━━━━━━━━━━━━━
+Average Threshold: {result['average_threshold']:.2f}
+Otsu Threshold: {result['otsu_threshold']:.2f}
+Difference: {result['difference']:.2f}
+Optimal: {"Yes" if result['is_optimal'] else "No"}
+"""
             elif choice == "Histogram":
                 hist = a.compute_histogram()
                 mean_val = hist.mean()
                 max_val = hist.max()
                 min_val = hist.min()
-                info_text += f"""HISTOGRAM ANALYSIS:
-                Mean: {mean_val:.2f}
-                Max: {max_val:.2f}
-                Min: {min_val:.2f}
-                Total Bins: 256
-                """
+                info_text += f"""HISTOGRAM ANALYSIS
+━━━━━━━━━━━━━━━━━━━━
+Mean: {mean_val:.2f}
+Max: {max_val:.2f}
+Min: {min_val:.2f}
+Total Bins: 256
+"""
 
             self.info_display.setText(info_text)
         except Exception as e:
@@ -566,26 +592,255 @@ class ImageDropWindow(QWidget):
             file_type = info.get_type()
             channels = info.get_channel()
 
-            info_text = f"""IMAGE INFORMATION:
-            Resolution: {width} x {height}
-            File Size: {size} MB
-            Type: {file_type}
-            Channels: {channels}
-            """
+            info_text = f"""IMAGE INFORMATION
+━━━━━━━━━━━━━━━━━━━━
+Resolution: {width} x {height}
+File Size: {size} MB
+Type: {file_type}
+Channels: {channels}
+"""
             self.info_display.setText(info_text)
         except:
             pass
 
-    def save_image(self):
-        img = self.transformed_img if self.transformed_img is not None else (
-            self.resized_img if self.resized_img is not None else self.filtered_img
-        )
-        if img is None:
-            return
+    def show_compress_inputs(self):
+        self.compress_input1.hide()
+        
+        choice = self.combo_compress.currentText()
+        
+        if choice == "Golomb-Rice":
+            self.compress_input1.setPlaceholderText("M (power of 2, e.g., 4)")
+            self.compress_input1.show()
+        elif choice == "DCT":
+            self.compress_input1.setPlaceholderText("Block size (e.g., 8)")
+            self.compress_input1.show()
+        elif choice == "Predictive":
+            self.compress_input1.setPlaceholderText("Mode: left/top/avg")
+            self.compress_input1.show()
+        elif choice == "Wavelet":
+            self.compress_input1.setPlaceholderText("Level (e.g., 1)")
+            self.compress_input1.show()
 
-        path, _ = QFileDialog.getSaveFileName(self, "Save Image As", "", "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp)")
-        if path:
-            cv2.imwrite(path, img)
+    def apply_compression(self):
+        current_img = self.transformed_img if self.transformed_img is not None else (
+            self.resized_img if self.resized_img is not None else (
+                self.filtered_img if self.filtered_img is not None else None
+            )
+        )
+        
+        if current_img is None and not self.current_image_path:
+            return
+            
+        if current_img is None:
+            temp_path = self.current_image_path
+        else:
+            temp_path = "/tmp/temp_compress.png"
+            cv2.imwrite(temp_path, current_img)
+        
+        try:
+            comp = Compress(temp_path)
+            choice = self.combo_compress.currentText()
+            
+            if choice == "Huffman":
+                encoded, huff_map = comp.huffman()
+                stats = comp.get_compression_stats(encoded)
+                self.compressed_data = (encoded, huff_map)
+                self.compression_method = "huffman"
+                self.show_compression_stats(stats, choice)
+                
+            elif choice == "Golomb-Rice":
+                M = int(self.compress_input1.text()) if self.compress_input1.text() else 4
+                encoded = comp.golomb_rice(M)
+                encoded_str = "".join(encoded)
+                stats = comp.get_compression_stats(encoded_str)
+                self.compressed_data = encoded
+                self.compression_method = "golomb"
+                self.show_compression_stats(stats, choice)
+                
+            elif choice == "Arithmetic":
+                encoded, cum = comp.arithmetic()
+                self.compressed_data = (encoded, cum)
+                self.compression_method = "arithmetic"
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Encoded Value: {encoded:.10f}
+Method: Arithmetic Coding
+"""
+                self.info_display.setText(info_text)
+                
+            elif choice == "LZW":
+                result, dict_size = comp.lzw()
+                stats = comp.get_compression_stats(result)
+                self.compressed_data = (result, dict_size)
+                self.compression_method = "lzw"
+                stats['dictionary_size'] = dict_size
+                self.show_compression_stats(stats, choice)
+                
+            elif choice == "RLE":
+                encoded = comp.rle()
+                stats = comp.get_compression_stats(encoded)
+                self.compressed_data = encoded
+                self.compression_method = "rle"
+                self.show_compression_stats(stats, choice)
+                
+            elif choice == "Symbol-Based":
+                encoded, symbol_map = comp.symbol_based()
+                stats = comp.get_compression_stats(encoded)
+                self.compressed_data = (encoded, symbol_map)
+                self.compression_method = "symbol"
+                self.show_compression_stats(stats, choice)
+                
+            elif choice == "Bit-Plane":
+                bit_planes = comp.bit_plane()
+                self.compressed_data = bit_planes
+                self.compression_method = "bitplane"
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Method: Bit-Plane Slicing
+Planes Generated: {len(bit_planes)}
+"""
+                self.info_display.setText(info_text)
+                
+            elif choice == "DCT":
+                block_size = int(self.compress_input1.text()) if self.compress_input1.text() else 8
+                dct_result = comp.dct_blocks(block_size)
+                self.compressed_data = dct_result
+                self.compression_method = "dct"
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Method: DCT Transform
+Block Size: {block_size}x{block_size}
+Output Shape: {dct_result.shape}
+"""
+                self.info_display.setText(info_text)
+                
+            elif choice == "Predictive":
+                mode = self.compress_input1.text() if self.compress_input1.text() else 'left'
+                residual, predicted = comp.predictive(mode)
+                self.compressed_data = (residual, predicted)
+                self.compression_method = "predictive"
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Method: Predictive Coding
+Mode: {mode}
+Residual Range: [{residual.min()}, {residual.max()}]
+"""
+                self.info_display.setText(info_text)
+                
+            elif choice == "Wavelet":
+                level = int(self.compress_input1.text()) if self.compress_input1.text() else 1
+                wavelet_result = comp.wavelet(level)
+                self.compressed_data = wavelet_result
+                self.compression_method = "wavelet"
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Method: Wavelet Transform
+Level: {level}
+Output Shape: {wavelet_result.shape}
+"""
+                self.info_display.setText(info_text)
+                
+        except Exception as e:
+            self.info_display.setText(f"Compression error: {str(e)}")
+
+    def show_compression_stats(self, stats, method):
+        info_text = f"""COMPRESSION: {method}
+━━━━━━━━━━━━━━━━━━━━
+Original Bits: {stats['original_bits']}
+Compressed Bits: {stats['compressed_bits']}
+Compression Ratio: {stats['compression_ratio']}:1
+Space Saving: {stats['space_saving']}%
+"""
+        if 'dictionary_size' in stats:
+            info_text += f"Dictionary Size: {stats['dictionary_size']}\n"
+        
+        self.info_display.setText(info_text)
+
+    def save_image(self):
+        if self.compression_method:
+            path, selected_filter = QFileDialog.getSaveFileName(
+                self, 
+                "Save Compressed/Decompressed Image", 
+                "", 
+                "Image Files (*.png *.jpg *.bmp);;NumPy Array (*.npy);;Text File (*.txt)"
+            )
+            if not path:
+                return
+                
+            try:
+                if path.endswith('.npy') or path.endswith('.txt'):
+                    if path.endswith('.npy'):
+                        if isinstance(self.compressed_data, np.ndarray):
+                            np.save(path, self.compressed_data)
+                        elif isinstance(self.compressed_data, tuple):
+                            np.save(path, self.compressed_data[0])
+                        else:
+                            np.save(path, np.array(self.compressed_data))
+                    else:
+                        with open(path, 'w') as f:
+                            f.write(str(self.compressed_data))
+                else:
+                    if not any(path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.bmp']):
+                        if 'Image Files' in selected_filter or 'PNG' in selected_filter:
+                            path += '.png'
+                        elif 'JPEG' in selected_filter:
+                            path += '.jpg'
+                        elif 'BMP' in selected_filter:
+                            path += '.bmp'
+                        else:
+                            path += '.png'
+                    
+                    img_to_save = None
+                    
+                    if self.compression_method in ["dct", "bitplane", "predictive", "wavelet"]:
+                        if self.compression_method == "dct":
+                            img_to_save = np.uint8(np.clip(self.compressed_data, 0, 255))
+                        elif self.compression_method == "bitplane":
+                            reconstructed = np.zeros_like(self.compressed_data[0], dtype=np.uint8)
+                            for bit_position, plane in enumerate(self.compressed_data):
+                                reconstructed += (plane << bit_position)
+                            img_to_save = reconstructed
+                        elif self.compression_method == "predictive":
+                            residual, predicted = self.compressed_data
+                            reconstructed = np.clip(predicted + residual, 0, 255).astype(np.uint8)
+                            img_to_save = reconstructed
+                        elif self.compression_method == "wavelet":
+                            img_to_save = np.uint8(np.clip(self.compressed_data, 0, 255))
+                    else:
+                        img_to_save = self.transformed_img if self.transformed_img is not None else (
+                            self.resized_img if self.resized_img is not None else self.filtered_img
+                        )
+                    
+                    if img_to_save is not None:
+                        cv2.imwrite(path, img_to_save)
+                    else:
+                        print("No image data available to save")
+                        
+            except Exception as e:
+                print(f"Save error: {e}")
+        else:
+            img = self.transformed_img if self.transformed_img is not None else (
+                self.resized_img if self.resized_img is not None else self.filtered_img
+            )
+            if img is None:
+                return
+
+            path, selected_filter = QFileDialog.getSaveFileName(self, "Save Image As", "", "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp)")
+            if path:
+                if not any(path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.bmp']):
+                    if 'PNG' in selected_filter:
+                        path += '.png'
+                    elif 'JPEG' in selected_filter:
+                        path += '.jpg'
+                    elif 'BMP' in selected_filter:
+                        path += '.bmp'
+                    else:
+                        path += '.png'
+                
+                try:
+                    cv2.imwrite(path, img)
+                except Exception as e:
+                    print(f"Save error: {e}")
 
 app = QApplication(sys.argv)
 window = ImageDropWindow()
