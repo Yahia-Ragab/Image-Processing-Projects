@@ -1,233 +1,234 @@
 import cv2
 import numpy as np
-from ip import IP
 from collections import Counter
 import heapq
+import math
+from ip import IP
+
 
 class Compress(IP):
     def __init__(self, path):
         super().__init__(path)
-        self.gray_img = cv2.cvtColor(self.img, cv2.COLOR_BGR2GRAY) if len(self.img.shape) == 3 else self.img
+        self.gray_img = self._to_gray_uint8()
         self.data = self.gray_img.flatten().tolist()
-    
+
+    def _to_gray_uint8(self):
+        if self.img.ndim == 3:
+            gray = np.mean(self.img, axis=2)
+        else:
+            gray = self.img
+        return np.clip(gray, 0, 255).astype(np.uint8)
+
+    # ---------------- Huffman ---------------- #
     def huffman(self):
         if not self.data:
             return "", {}
-        
+
         freq = Counter(self.data)
-        
+
         if len(freq) == 1:
-            symbol = list(freq.keys())[0]
-            return "0" * len(self.data), {symbol: "0"}
-        
-        heap = [[weight, [symbol, ""]] for symbol, weight in freq.items()]
+            sym = next(iter(freq))
+            return "0" * len(self.data), {sym: "0"}
+
+        heap = [[f, [s, ""]] for s, f in freq.items()]
         heapq.heapify(heap)
-        
+
         while len(heap) > 1:
             lo = heapq.heappop(heap)
             hi = heapq.heappop(heap)
-            
-            for pair in lo[1:]:
-                pair[1] = "0" + pair[1]
-            for pair in hi[1:]:
-                pair[1] = "1" + pair[1]
-            
+            for p in lo[1:]:
+                p[1] = "0" + p[1]
+            for p in hi[1:]:
+                p[1] = "1" + p[1]
             heapq.heappush(heap, [lo[0] + hi[0]] + lo[1:] + hi[1:])
-        
-        huff_map = {symbol: code for symbol, code in sorted(heap[0][1:])}
-        encoded = "".join(huff_map[value] for value in self.data)
-        
+
+        huff_map = {s: c for s, c in heap[0][1:]}
+        encoded = "".join(huff_map[v] for v in self.data)
         return encoded, huff_map
-    
+
+    # ---------------- Golomb-Rice ---------------- #
     def golomb_rice(self, M=4):
         if M <= 0 or (M & (M - 1)) != 0:
-            raise ValueError("M must be a power of 2")
-        
-        k = int(np.log2(M))
+            raise ValueError("M must be power of 2")
+
+        k = int(math.log2(M))
         encoded = []
-        
         for x in self.data:
             q = x // M
             r = x % M
-            unary = "1" * q + "0"
-            binary = format(r, f"0{k}b")
-            encoded.append(unary + binary)
-        
+            encoded.append("1" * q + "0" + format(r, f"0{k}b"))
         return encoded
-    
+
+    # ---------------- Arithmetic (demo) ---------------- #
     def arithmetic(self):
         if not self.data:
-            return 0.0
-        
+            return 0.0, {}
+
         freq = Counter(self.data)
         total = len(self.data)
         probs = {k: v / total for k, v in freq.items()}
-        
+
         cum = {}
-        cum_val = 0.0
-        for symbol in sorted(probs.keys()):
-            prob = probs[symbol]
-            cum[symbol] = (cum_val, cum_val + prob)
-            cum_val += prob
-        
+        c = 0.0
+        for s in sorted(probs):
+            cum[s] = (c, c + probs[s])
+            c += probs[s]
+
         low, high = 0.0, 1.0
-        for symbol in self.data:
-            range_width = high - low
-            high = low + range_width * cum[symbol][1]
-            low = low + range_width * cum[symbol][0]
-        
+        for s in self.data:
+            r = high - low
+            high = low + r * cum[s][1]
+            low = low + r * cum[s][0]
+
         return (low + high) / 2, cum
-    
+
+    # ---------------- LZW ---------------- #
     def lzw(self):
-        dictionary_size = 256
-        dictionary = {bytes([i]): i for i in range(dictionary_size)}
-        
-        result = []
+        dictionary = {bytes([i]): i for i in range(256)}
+        dict_size = 256
+
         w = bytes()
-        
-        for value in self.data:
-            c = bytes([value])
+        result = []
+
+        for v in self.data:
+            c = bytes([v])
             wc = w + c
-            
             if wc in dictionary:
                 w = wc
             else:
                 result.append(dictionary[w])
-                dictionary[wc] = dictionary_size
-                dictionary_size += 1
+                dictionary[wc] = dict_size
+                dict_size += 1
                 w = c
-        
+
         if w:
             result.append(dictionary[w])
-        
-        return result, dictionary_size
-    
+
+        return result, dict_size
+
+    # ---------------- RLE ---------------- #
     def rle(self):
         if not self.data:
             return []
-        
+
         encoded = []
-        current_value = self.data[0]
+        prev = self.data[0]
         count = 1
-        
-        for value in self.data[1:]:
-            if value == current_value and count < 255:
+
+        for v in self.data[1:]:
+            if v == prev and count < 255:
                 count += 1
             else:
-                encoded.append((current_value, count))
-                current_value = value
+                encoded.append((prev, count))
+                prev = v
                 count = 1
-        
-        encoded.append((current_value, count))
+
+        encoded.append((prev, count))
         return encoded
-    
+
+    # ---------------- Symbol-based ---------------- #
     def symbol_based(self):
         freq = Counter(self.data)
-        sorted_symbols = sorted(freq.items(), key=lambda x: (-x[1], x[0]))
-        
-        symbol_map = {symbol: idx for idx, (symbol, _) in enumerate(sorted_symbols)}
-        encoded = [symbol_map[value] for value in self.data]
-        
-        return encoded, symbol_map
-    
+        symbols = sorted(freq.items(), key=lambda x: (-x[1], x[0]))
+        mapping = {s: i for i, (s, _) in enumerate(symbols)}
+        encoded = [mapping[v] for v in self.data]
+        return encoded, mapping
+
+    # ---------------- Bit-plane ---------------- #
     def bit_plane(self):
-        bit_planes = []
-        for bit_position in range(8):
-            plane = (self.gray_img >> bit_position) & 1
-            bit_planes.append(plane)
-        
-        return bit_planes
-    
+        planes = []
+        for i in range(8):
+            planes.append(((self.gray_img >> i) & 1).astype(np.uint8))
+        return planes
+
+    # ---------------- DCT ---------------- #
     def dct_blocks(self, block_size=8):
         h, w = self.gray_img.shape
-        
         pad_h = (block_size - h % block_size) % block_size
         pad_w = (block_size - w % block_size) % block_size
-        
-        padded_img = np.pad(self.gray_img, ((0, pad_h), (0, pad_w)), mode='edge')
-        new_h, new_w = padded_img.shape
-        
-        dct_result = np.zeros((new_h, new_w), dtype=np.float32)
-        
-        for i in range(0, new_h, block_size):
-            for j in range(0, new_w, block_size):
-                block = np.float32(padded_img[i:i+block_size, j:j+block_size])
-                dct_block = cv2.dct(block)
-                dct_result[i:i+block_size, j:j+block_size] = dct_block
-        
-        return dct_result[:h, :w]
-    
-    def predictive(self, mode='left'):
+        padded = np.pad(self.gray_img, ((0, pad_h), (0, pad_w)), mode="edge")
+
+        out = np.zeros_like(padded, dtype=np.float32)
+        for i in range(0, padded.shape[0], block_size):
+            for j in range(0, padded.shape[1], block_size):
+                block = np.float32(padded[i:i+block_size, j:j+block_size])
+                out[i:i+block_size, j:j+block_size] = cv2.dct(block)
+
+        return out[:h, :w]
+
+    # ---------------- Predictive ---------------- #
+    def predictive(self, mode="left"):
         h, w = self.gray_img.shape
-        predicted = np.zeros_like(self.gray_img, dtype=np.int16)
         residual = np.zeros_like(self.gray_img, dtype=np.int16)
-        
+        predicted = np.zeros_like(self.gray_img, dtype=np.uint8)
+
         for i in range(h):
             for j in range(w):
-                if mode == 'left':
-                    pred_value = self.gray_img[i, j-1] if j > 0 else 128
-                elif mode == 'top':
-                    pred_value = self.gray_img[i-1, j] if i > 0 else 128
-                elif mode == 'avg':
-                    left = self.gray_img[i, j-1] if j > 0 else 128
-                    top = self.gray_img[i-1, j] if i > 0 else 128
-                    pred_value = (int(left) + int(top)) // 2
+                if mode == "left":
+                    p = self.gray_img[i, j-1] if j > 0 else 0
+                elif mode == "top":
+                    p = self.gray_img[i-1, j] if i > 0 else 0
                 else:
-                    pred_value = 128
-                
-                predicted[i, j] = pred_value
-                residual[i, j] = int(self.gray_img[i, j]) - pred_value
-        
+                    l = self.gray_img[i, j-1] if j > 0 else 0
+                    t = self.gray_img[i-1, j] if i > 0 else 0
+                    p = (int(l) + int(t)) // 2
+
+                predicted[i, j] = p
+                residual[i, j] = int(self.gray_img[i, j]) - int(p)
+
         return residual, predicted
-    
+
+    # ---------------- Wavelet (Haar) ---------------- #
     def wavelet(self, level=1):
-        img = np.float32(self.gray_img)
-        
+        img = self.gray_img.astype(np.float32)
         for _ in range(level):
             h, w = img.shape
-            
-            if h < 2 or w < 2:
-                break
-            
-            new_h = h // 2
-            new_w = w // 2
-            
-            result = np.zeros_like(img)
-            
-            for i in range(new_h):
+            h2, w2 = h // 2, w // 2
+            out = np.zeros_like(img)
+
+            for i in range(h2):
                 for j in range(w):
-                    result[i, j] = (img[2*i, j] + img[2*i+1, j]) / 2
-                    result[new_h+i, j] = (img[2*i, j] - img[2*i+1, j]) / 2
-            
-            temp = result.copy()
+                    out[i, j] = (img[2*i, j] + img[2*i+1, j]) / 2
+                    out[h2+i, j] = (img[2*i, j] - img[2*i+1, j]) / 2
+
+            tmp = out.copy()
             for i in range(h):
-                for j in range(new_w):
-                    result[i, j] = (temp[i, 2*j] + temp[i, 2*j+1]) / 2
-                    result[i, new_w+j] = (temp[i, 2*j] - temp[i, 2*j+1]) / 2
-            
-            img = result
-        
+                for j in range(w2):
+                    out[i, j] = (tmp[i, 2*j] + tmp[i, 2*j+1]) / 2
+                    out[i, w2+j] = (tmp[i, 2*j] - tmp[i, 2*j+1]) / 2
+
+            img = out
+
         return img
-    
+
+    # ---------------- Stats ---------------- #
     def get_compression_stats(self, encoded_data, original_bits=None):
         if original_bits is None:
             original_bits = len(self.data) * 8
-        
+
         if isinstance(encoded_data, str):
             compressed_bits = len(encoded_data)
         elif isinstance(encoded_data, list):
-            compressed_bits = len(encoded_data) * 16
+            if encoded_data and isinstance(encoded_data[0], str):
+                compressed_bits = sum(len(x) for x in encoded_data)
+            elif encoded_data and isinstance(encoded_data[0], tuple):
+                compressed_bits = len(encoded_data) * 16
+            elif encoded_data and isinstance(encoded_data[0], int):
+                bits = max(9, max(encoded_data).bit_length())
+                compressed_bits = len(encoded_data) * bits
+            else:
+                compressed_bits = original_bits
         elif isinstance(encoded_data, np.ndarray):
-            compressed_bits = encoded_data.size * 8
+            compressed_bits = encoded_data.size * 32
         else:
             compressed_bits = original_bits
-        
-        compression_ratio = original_bits / compressed_bits if compressed_bits > 0 else 0
-        space_saving = ((original_bits - compressed_bits) / original_bits * 100) if original_bits > 0 else 0
-        
+
+        ratio = original_bits / compressed_bits if compressed_bits else 0
+        saving = ((original_bits - compressed_bits) / original_bits * 100) if original_bits else 0
+
         return {
-            'original_bits': original_bits,
-            'compressed_bits': compressed_bits,
-            'compression_ratio': round(compression_ratio, 2),
-            'space_saving': round(space_saving, 2)
+            "original_bits": original_bits,
+            "compressed_bits": compressed_bits,
+            "compression_ratio": round(ratio, 2),
+            "space_saving": round(saving, 2),
         }

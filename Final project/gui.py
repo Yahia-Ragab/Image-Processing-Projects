@@ -1,7 +1,7 @@
 import sys
 from PyQt6.QtWidgets import (
     QApplication, QLabel, QWidget, QVBoxLayout, QPushButton, QFileDialog,
-    QHBoxLayout, QComboBox, QFrame, QLineEdit, QTextEdit
+    QHBoxLayout, QComboBox, QFrame, QLineEdit, QTextEdit, QCheckBox, QSlider
 )
 from PyQt6.QtGui import QPixmap, QImage
 from PyQt6.QtCore import Qt
@@ -33,15 +33,29 @@ class ImageDropWindow(QWidget):
         self.last_resize_params = {}
         self.last_trans_choice = "None"
         self.last_trans_params = {}
+        
+        self.image_width = 0
+        self.image_height = 0
 
         self.menu_layout = QVBoxLayout()
+
+        # Reset Button
+        self.reset_btn = QPushButton("Reset All")
+        self.reset_btn.clicked.connect(self.reset_all)
+        self.reset_btn.setStyleSheet("background-color: #ff4444; color: white; font-weight: bold; padding: 8px;")
+        self.menu_layout.addWidget(self.reset_btn)
+
+        # Grayscale Checkbox
+        self.grayscale_checkbox = QCheckBox("Apply Grayscale")
+        self.grayscale_checkbox.stateChanged.connect(self.apply_grayscale)
+        self.menu_layout.addWidget(self.grayscale_checkbox)
 
         self.filter_label = QLabel("Filters")
         self.menu_layout.addWidget(self.filter_label)
 
         self.combo1 = QComboBox()
         self.combo1.addItems([
-            "None", "Gray", "Blur", "Median", "Laplacian", "Sobel",
+            "None", "Blur", "Median", "Laplacian", "Sobel",
             "Gradient", "Sharpen", "Binary", "Adjust"
         ])
         self.combo1.currentTextChanged.connect(self.show_filter_inputs)
@@ -95,18 +109,31 @@ class ImageDropWindow(QWidget):
         self.combo_trans.currentTextChanged.connect(self.show_trans_inputs)
         self.menu_layout.addWidget(self.combo_trans)
 
-        self.trans_input1 = QLineEdit()
-        self.trans_input1.setPlaceholderText("Param 1")
-        self.trans_input2 = QLineEdit()
-        self.trans_input2.setPlaceholderText("Param 2")
-        self.trans_input3 = QLineEdit()
-        self.trans_input3.setPlaceholderText("Param 3")
-        self.trans_input4 = QLineEdit()
-        self.trans_input4.setPlaceholderText("Param 4")
+        # Transformation sliders
+        self.trans_slider1_label = QLabel("")
+        self.trans_slider1 = QSlider(Qt.Orientation.Horizontal)
+        self.trans_slider1.valueChanged.connect(self.update_trans_slider_labels)
+        
+        self.trans_slider2_label = QLabel("")
+        self.trans_slider2 = QSlider(Qt.Orientation.Horizontal)
+        self.trans_slider2.valueChanged.connect(self.update_trans_slider_labels)
+        
+        self.trans_slider3_label = QLabel("")
+        self.trans_slider3 = QSlider(Qt.Orientation.Horizontal)
+        self.trans_slider3.valueChanged.connect(self.update_trans_slider_labels)
+        
+        self.trans_slider4_label = QLabel("")
+        self.trans_slider4 = QSlider(Qt.Orientation.Horizontal)
+        self.trans_slider4.valueChanged.connect(self.update_trans_slider_labels)
 
-        for widget in (self.trans_input1, self.trans_input2, self.trans_input3, self.trans_input4):
-            widget.hide()
-            self.menu_layout.addWidget(widget)
+        for label, slider in [(self.trans_slider1_label, self.trans_slider1),
+                              (self.trans_slider2_label, self.trans_slider2),
+                              (self.trans_slider3_label, self.trans_slider3),
+                              (self.trans_slider4_label, self.trans_slider4)]:
+            label.hide()
+            slider.hide()
+            self.menu_layout.addWidget(label)
+            self.menu_layout.addWidget(slider)
 
         self.apply_transform_btn = QPushButton("Apply Transformation")
         self.apply_transform_btn.clicked.connect(self.apply_transformation)
@@ -143,6 +170,11 @@ class ImageDropWindow(QWidget):
         self.compress_input1.setPlaceholderText("Param 1")
         self.compress_input1.hide()
         self.menu_layout.addWidget(self.compress_input1)
+        
+        self.compress_input2 = QLineEdit()
+        self.compress_input2.setPlaceholderText("Quality/Threshold")
+        self.compress_input2.hide()
+        self.menu_layout.addWidget(self.compress_input2)
 
         self.apply_compress_btn = QPushButton("Apply Compression")
         self.apply_compress_btn.clicked.connect(self.apply_compression)
@@ -176,6 +208,71 @@ class ImageDropWindow(QWidget):
         main.addLayout(right_layout, 3)
         self.setLayout(main)
 
+    def reset_all(self):
+        """Reset all settings but keep the original image displayed"""
+        if not self.current_image_path:
+            return
+            
+        # Reset processing results
+        self.transformed_img = None
+        self.resized_img = None
+        self.compressed_data = None
+        self.compression_method = None
+        
+        self.last_filter_choice = "None"
+        self.last_filter_params = {}
+        self.last_resize_choice = "None"
+        self.last_resize_params = {}
+        self.last_trans_choice = "None"
+        self.last_trans_params = {}
+        
+        # Reset UI elements
+        self.grayscale_checkbox.setChecked(False)
+        self.combo1.setCurrentText("None")
+        self.combo_resize.setCurrentText("None")
+        self.combo_trans.setCurrentText("None")
+        self.combo_analysis.setCurrentText("None")
+        self.combo_compress.setCurrentText("None")
+        
+        # Reset to original image without reloading
+        f = Filter(self.current_image_path)
+        self.filtered_img = f.img
+        
+        # Update preview to show original
+        self.update_preview()
+        self.update_info()
+
+    def apply_grayscale(self, state):
+        """Apply or remove grayscale filter"""
+        if not self.current_image_path:
+            return
+            
+        if state == Qt.CheckState.Checked.value:
+            f = Filter(self.current_image_path)
+            self.filtered_img = f.to_gray()
+        else:
+            f = Filter(self.current_image_path)
+            self.filtered_img = f.img
+            
+        self.reapply_pipeline_from_filter()
+
+    def update_trans_slider_labels(self):
+        """Update slider value labels"""
+        choice = self.combo_trans.currentText()
+        
+        if choice == "Rotate":
+            self.trans_slider1_label.setText(f"Angle: {self.trans_slider1.value()}°")
+        elif choice == "Crop":
+            self.trans_slider1_label.setText(f"X: {self.trans_slider1.value()}")
+            self.trans_slider2_label.setText(f"Y: {self.trans_slider2.value()}")
+            self.trans_slider3_label.setText(f"Width: {self.trans_slider3.value()}")
+            self.trans_slider4_label.setText(f"Height: {self.trans_slider4.value()}")
+        elif choice in ("Shear X", "Shear Y"):
+            self.trans_slider1_label.setText(f"Factor: {self.trans_slider1.value() / 100.0:.2f}")
+        elif choice == "Translate":
+            self.trans_slider1_label.setText(f"TX: {self.trans_slider1.value()}")
+            self.trans_slider2_label.setText(f"TY: {self.trans_slider2.value()}")
+
     def cv_to_pixmap(self, img):
         if img is None:
             return QPixmap()
@@ -204,11 +301,26 @@ class ImageDropWindow(QWidget):
         self.current_image_path = path
         pix = QPixmap(path)
         if not pix.isNull():
+            # Store image dimensions
+            img = cv2.imread(path)
+            if img is not None:
+                self.image_height, self.image_width = img.shape[:2]
+            
             scaled1 = pix.scaled(self.drop_label.size(), Qt.AspectRatioMode.KeepAspectRatio)
             scaled2 = pix.scaled(self.preview_label.size(), Qt.AspectRatioMode.KeepAspectRatio)
 
             self.drop_label.setPixmap(scaled1)
             self.preview_label.setPixmap(scaled2)
+
+            # Don't reset filtered_img if we're just resetting settings
+            if self.filtered_img is None:
+                # Apply grayscale if checkbox is checked
+                if self.grayscale_checkbox.isChecked():
+                    f = Filter(path)
+                    self.filtered_img = f.to_gray()
+                else:
+                    f = Filter(path)
+                    self.filtered_img = f.img
 
             self.update_info()
             self.show_filter_inputs()
@@ -239,20 +351,27 @@ class ImageDropWindow(QWidget):
             self.filter_input1.show()
             self.filter_input2.show()
 
-        if choice in ["None", "Gray", "Gradient", "Sharpen", "Binary"]:
+        if choice in ["None", "Gradient", "Sharpen", "Binary"]:
             self.apply_filter()
 
     def apply_filter(self):
         if not self.current_image_path:
             return
 
-        f = Filter(self.current_image_path)
+        # Get base image (with or without grayscale)
+        if self.grayscale_checkbox.isChecked():
+            f = Filter(self.current_image_path)
+            base_img = f.to_gray()
+            temp_path = "/tmp/temp_gray.png"
+            cv2.imwrite(temp_path, base_img)
+            f = Filter(temp_path)
+        else:
+            f = Filter(self.current_image_path)
+
         choice = self.combo1.currentText()
 
         try:
-            if choice == "Gray":
-                img = f.to_gray()
-            elif choice == "Blur":
+            if choice == "Blur":
                 k = int(self.filter_input1.text()) if self.filter_input1.text() else 19
                 sigma = int(self.filter_input2.text()) if self.filter_input2.text() else 3
                 img = f.to_blur(k, sigma)
@@ -430,29 +549,75 @@ class ImageDropWindow(QWidget):
         self.update_info()
 
     def show_trans_inputs(self):
-        for w in (self.trans_input1, self.trans_input2, self.trans_input3, self.trans_input4):
-            w.hide()
+        # Hide all sliders
+        for label, slider in [(self.trans_slider1_label, self.trans_slider1),
+                              (self.trans_slider2_label, self.trans_slider2),
+                              (self.trans_slider3_label, self.trans_slider3),
+                              (self.trans_slider4_label, self.trans_slider4)]:
+            label.hide()
+            slider.hide()
 
         choice = self.combo_trans.currentText()
 
         if choice == "Rotate":
-            self.trans_input1.setPlaceholderText("Angle")
-            self.trans_input1.show()
+            self.trans_slider1_label.setText(f"Angle: 0°")
+            self.trans_slider1.setMinimum(0)
+            self.trans_slider1.setMaximum(360)
+            self.trans_slider1.setValue(0)
+            self.trans_slider1_label.show()
+            self.trans_slider1.show()
+            
         elif choice == "Crop":
-            self.trans_input1.setPlaceholderText("x")
-            self.trans_input2.setPlaceholderText("y")
-            self.trans_input3.setPlaceholderText("w")
-            self.trans_input4.setPlaceholderText("h")
-            for w in (self.trans_input1, self.trans_input2, self.trans_input3, self.trans_input4):
-                w.show()
+            self.trans_slider1_label.setText(f"X: 0")
+            self.trans_slider1.setMinimum(0)
+            self.trans_slider1.setMaximum(self.image_width)
+            self.trans_slider1.setValue(0)
+            
+            self.trans_slider2_label.setText(f"Y: 0")
+            self.trans_slider2.setMinimum(0)
+            self.trans_slider2.setMaximum(self.image_height)
+            self.trans_slider2.setValue(0)
+            
+            self.trans_slider3_label.setText(f"Width: {self.image_width}")
+            self.trans_slider3.setMinimum(1)
+            self.trans_slider3.setMaximum(self.image_width)
+            self.trans_slider3.setValue(self.image_width)
+            
+            self.trans_slider4_label.setText(f"Height: {self.image_height}")
+            self.trans_slider4.setMinimum(1)
+            self.trans_slider4.setMaximum(self.image_height)
+            self.trans_slider4.setValue(self.image_height)
+            
+            for label, slider in [(self.trans_slider1_label, self.trans_slider1),
+                                  (self.trans_slider2_label, self.trans_slider2),
+                                  (self.trans_slider3_label, self.trans_slider3),
+                                  (self.trans_slider4_label, self.trans_slider4)]:
+                label.show()
+                slider.show()
+                
         elif choice in ("Shear X", "Shear Y"):
-            self.trans_input1.setPlaceholderText("Factor")
-            self.trans_input1.show()
+            self.trans_slider1_label.setText(f"Factor: 0.00")
+            self.trans_slider1.setMinimum(-100)
+            self.trans_slider1.setMaximum(100)
+            self.trans_slider1.setValue(0)
+            self.trans_slider1_label.show()
+            self.trans_slider1.show()
+            
         elif choice == "Translate":
-            self.trans_input1.setPlaceholderText("tx")
-            self.trans_input2.setPlaceholderText("ty")
-            self.trans_input1.show()
-            self.trans_input2.show()
+            self.trans_slider1_label.setText(f"TX: 0")
+            self.trans_slider1.setMinimum(-self.image_width)
+            self.trans_slider1.setMaximum(self.image_width)
+            self.trans_slider1.setValue(0)
+            
+            self.trans_slider2_label.setText(f"TY: 0")
+            self.trans_slider2.setMinimum(-self.image_height)
+            self.trans_slider2.setMaximum(self.image_height)
+            self.trans_slider2.setValue(0)
+            
+            self.trans_slider1_label.show()
+            self.trans_slider1.show()
+            self.trans_slider2_label.show()
+            self.trans_slider2.show()
 
     def apply_transformation(self):
         base_img = self.resized_img if self.resized_img is not None else self.filtered_img
@@ -467,31 +632,31 @@ class ImageDropWindow(QWidget):
 
         try:
             if c == "Rotate":
-                angle = float(self.trans_input1.text())
+                angle = float(self.trans_slider1.value())
                 img = t.rotate(angle)
                 self.last_trans_choice = c
                 self.last_trans_params = {'angle': angle}
             elif c == "Crop":
-                x = int(self.trans_input1.text())
-                y = int(self.trans_input2.text())
-                w = int(self.trans_input3.text())
-                h = int(self.trans_input4.text())
+                x = int(self.trans_slider1.value())
+                y = int(self.trans_slider2.value())
+                w = int(self.trans_slider3.value())
+                h = int(self.trans_slider4.value())
                 img = t.crop(x, y, w, h)
                 self.last_trans_choice = c
                 self.last_trans_params = {'x': x, 'y': y, 'w': w, 'h': h}
             elif c == "Shear X":
-                f = float(self.trans_input1.text())
+                f = float(self.trans_slider1.value() / 100.0)
                 img = t.shear_x(f)
                 self.last_trans_choice = c
                 self.last_trans_params = {'factor': f}
             elif c == "Shear Y":
-                f = float(self.trans_input1.text())
+                f = float(self.trans_slider1.value() / 100.0)
                 img = t.shear_y(f)
                 self.last_trans_choice = c
                 self.last_trans_params = {'factor': f}
             elif c == "Translate":
-                tx = int(self.trans_input1.text())
-                ty = int(self.trans_input2.text())
+                tx = int(self.trans_slider1.value())
+                ty = int(self.trans_slider2.value())
                 img = t.translate(tx, ty)
                 self.last_trans_choice = c
                 self.last_trans_params = {'tx': tx, 'ty': ty}
@@ -605,6 +770,7 @@ Channels: {channels}
 
     def show_compress_inputs(self):
         self.compress_input1.hide()
+        self.compress_input2.hide()
         
         choice = self.combo_compress.currentText()
         
@@ -613,13 +779,17 @@ Channels: {channels}
             self.compress_input1.show()
         elif choice == "DCT":
             self.compress_input1.setPlaceholderText("Block size (e.g., 8)")
+            self.compress_input2.setPlaceholderText("Quality (1-100, default 50)")
             self.compress_input1.show()
+            self.compress_input2.show()
         elif choice == "Predictive":
             self.compress_input1.setPlaceholderText("Mode: left/top/avg")
             self.compress_input1.show()
         elif choice == "Wavelet":
             self.compress_input1.setPlaceholderText("Level (e.g., 1)")
+            self.compress_input2.setPlaceholderText("Threshold (e.g., 10)")
             self.compress_input1.show()
+            self.compress_input2.show()
 
     def apply_compression(self):
         current_img = self.transformed_img if self.transformed_img is not None else (
@@ -646,7 +816,23 @@ Channels: {channels}
                 stats = comp.get_compression_stats(encoded)
                 self.compressed_data = (encoded, huff_map)
                 self.compression_method = "huffman"
-                self.show_compression_stats(stats, choice)
+                
+                # Show encoded string preview
+                preview = encoded[:200] + "..." if len(encoded) > 200 else encoded
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Original Bits: {stats['original_bits']}
+Compressed Bits: {stats['compressed_bits']}
+Compression Ratio: {stats['compression_ratio']}:1
+Space Saving: {stats['space_saving']}%
+
+Huffman Codes (sample):
+{str(dict(list(huff_map.items())[:10]))}
+
+Encoded Data (preview):
+{preview}
+"""
+                self.info_display.setText(info_text)
                 
             elif choice == "Golomb-Rice":
                 M = int(self.compress_input1.text()) if self.compress_input1.text() else 4
@@ -655,16 +841,47 @@ Channels: {channels}
                 stats = comp.get_compression_stats(encoded_str)
                 self.compressed_data = encoded
                 self.compression_method = "golomb"
-                self.show_compression_stats(stats, choice)
+                
+                preview = encoded_str[:200] + "..." if len(encoded_str) > 200 else encoded_str
+                original_size_kb = stats['original_bits'] / 8 / 1024
+                compressed_size_kb = stats['compressed_bits'] / 8 / 1024
+                
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Original Size: {original_size_kb:.2f} KB
+Compressed Size: {compressed_size_kb:.2f} KB
+Original Bits: {stats['original_bits']}
+Compressed Bits: {stats['compressed_bits']}
+Compression Ratio: {stats['compression_ratio']}:1
+Space Saving: {stats['space_saving']}%
+M Parameter: {M}
+
+Encoded Data (preview):
+{preview}
+"""
+                self.info_display.setText(info_text)
                 
             elif choice == "Arithmetic":
                 encoded, cum = comp.arithmetic()
                 self.compressed_data = (encoded, cum)
                 self.compression_method = "arithmetic"
+                
+                original_size_kb = (len(comp.data) * 8) / 8 / 1024
+                compressed_size_kb = 8 / 8 / 1024
+                compression_ratio = (len(comp.data) * 8) / 64
+                space_saving = ((len(comp.data) * 8 - 64) / (len(comp.data) * 8) * 100)
+                
                 info_text = f"""COMPRESSION: {choice}
 ━━━━━━━━━━━━━━━━━━━━
-Encoded Value: {encoded:.10f}
+Original Size: {original_size_kb:.2f} KB
+Compressed Size: {compressed_size_kb:.4f} KB
 Method: Arithmetic Coding
+Compression Ratio: {compression_ratio:.2f}:1
+Space Saving: {space_saving:.2f}%
+Encoded Value: {encoded:.15f}
+
+Probability Ranges (sample):
+{str(dict(list(cum.items())[:10]))}
 """
                 self.info_display.setText(info_text)
                 
@@ -673,31 +890,98 @@ Method: Arithmetic Coding
                 stats = comp.get_compression_stats(result)
                 self.compressed_data = (result, dict_size)
                 self.compression_method = "lzw"
-                stats['dictionary_size'] = dict_size
-                self.show_compression_stats(stats, choice)
+                
+                preview = str(result[:50]) + "..." if len(result) > 50 else str(result)
+                original_size_kb = stats['original_bits'] / 8 / 1024
+                compressed_size_kb = stats['compressed_bits'] / 8 / 1024
+                
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Original Size: {original_size_kb:.2f} KB
+Compressed Size: {compressed_size_kb:.2f} KB
+Original Bits: {stats['original_bits']}
+Compressed Bits: {stats['compressed_bits']}
+Compression Ratio: {stats['compression_ratio']}:1
+Space Saving: {stats['space_saving']}%
+Final Dictionary Size: {dict_size}
+
+Encoded Indices (preview):
+{preview}
+"""
+                self.info_display.setText(info_text)
                 
             elif choice == "RLE":
                 encoded = comp.rle()
                 stats = comp.get_compression_stats(encoded)
                 self.compressed_data = encoded
                 self.compression_method = "rle"
-                self.show_compression_stats(stats, choice)
+                
+                preview = str(encoded[:20]) + "..." if len(encoded) > 20 else str(encoded)
+                original_size_kb = stats['original_bits'] / 8 / 1024
+                compressed_size_kb = stats['compressed_bits'] / 8 / 1024
+                
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Original Size: {original_size_kb:.2f} KB
+Compressed Size: {compressed_size_kb:.2f} KB
+Original Bits: {stats['original_bits']}
+Compressed Bits: {stats['compressed_bits']}
+Compression Ratio: {stats['compression_ratio']}:1
+Space Saving: {stats['space_saving']}%
+
+Run-Length Pairs (preview):
+{preview}
+"""
+                self.info_display.setText(info_text)
                 
             elif choice == "Symbol-Based":
                 encoded, symbol_map = comp.symbol_based()
                 stats = comp.get_compression_stats(encoded)
                 self.compressed_data = (encoded, symbol_map)
                 self.compression_method = "symbol"
-                self.show_compression_stats(stats, choice)
+                
+                preview = str(encoded[:100]) + "..." if len(encoded) > 100 else str(encoded)
+                original_size_kb = stats['original_bits'] / 8 / 1024
+                compressed_size_kb = stats['compressed_bits'] / 8 / 1024
+                
+                info_text = f"""COMPRESSION: {choice}
+━━━━━━━━━━━━━━━━━━━━
+Original Size: {original_size_kb:.2f} KB
+Compressed Size: {compressed_size_kb:.2f} KB
+Original Bits: {stats['original_bits']}
+Compressed Bits: {stats['compressed_bits']}
+Compression Ratio: {stats['compression_ratio']}:1
+Space Saving: {stats['space_saving']}%
+
+Symbol Map (sample):
+{str(dict(list(symbol_map.items())[:10]))}
+
+Encoded Data (preview):
+{preview}
+"""
+                self.info_display.setText(info_text)
                 
             elif choice == "Bit-Plane":
                 bit_planes = comp.bit_plane()
                 self.compressed_data = bit_planes
                 self.compression_method = "bitplane"
+                
+                # Display first bit plane
+                self.preview_label.setPixmap(
+                    self.cv_to_pixmap(bit_planes[0] * 255).scaled(
+                        self.preview_label.size(), 
+                        Qt.AspectRatioMode.KeepAspectRatio
+                    )
+                )
+                
                 info_text = f"""COMPRESSION: {choice}
 ━━━━━━━━━━━━━━━━━━━━
 Method: Bit-Plane Slicing
 Planes Generated: {len(bit_planes)}
+Plane Shape: {bit_planes[0].shape}
+
+Preview showing: Bit Plane 0 (LSB)
+Bit plane matrices can be saved individually
 """
                 self.info_display.setText(info_text)
                 
@@ -706,11 +990,29 @@ Planes Generated: {len(bit_planes)}
                 dct_result = comp.dct_blocks(block_size)
                 self.compressed_data = dct_result
                 self.compression_method = "dct"
+                
+                # Display DCT coefficients as image
+                dct_display = np.uint8(np.clip(np.abs(dct_result), 0, 255))
+                self.preview_label.setPixmap(
+                    self.cv_to_pixmap(dct_display).scaled(
+                        self.preview_label.size(), 
+                        Qt.AspectRatioMode.KeepAspectRatio
+                    )
+                )
+                
+                import numpy as np
                 info_text = f"""COMPRESSION: {choice}
 ━━━━━━━━━━━━━━━━━━━━
 Method: DCT Transform
 Block Size: {block_size}x{block_size}
 Output Shape: {dct_result.shape}
+
+Coefficient Stats:
+Min: {dct_result.min():.2f}
+Max: {dct_result.max():.2f}
+Mean: {dct_result.mean():.2f}
+
+Preview shows: Absolute DCT coefficients
 """
                 self.info_display.setText(info_text)
                 
@@ -719,11 +1021,29 @@ Output Shape: {dct_result.shape}
                 residual, predicted = comp.predictive(mode)
                 self.compressed_data = (residual, predicted)
                 self.compression_method = "predictive"
+                
+                # Display residual image
+                residual_display = np.uint8(np.clip(residual + 128, 0, 255))
+                self.preview_label.setPixmap(
+                    self.cv_to_pixmap(residual_display).scaled(
+                        self.preview_label.size(), 
+                        Qt.AspectRatioMode.KeepAspectRatio
+                    )
+                )
+                
+                import numpy as np
                 info_text = f"""COMPRESSION: {choice}
 ━━━━━━━━━━━━━━━━━━━━
 Method: Predictive Coding
 Mode: {mode}
-Residual Range: [{residual.min()}, {residual.max()}]
+
+Residual Stats:
+Min: {residual.min()}
+Max: {residual.max()}
+Mean: {residual.mean():.2f}
+Std Dev: {residual.std():.2f}
+
+Preview shows: Residual errors (offset +128)
 """
                 self.info_display.setText(info_text)
                 
@@ -732,16 +1052,34 @@ Residual Range: [{residual.min()}, {residual.max()}]
                 wavelet_result = comp.wavelet(level)
                 self.compressed_data = wavelet_result
                 self.compression_method = "wavelet"
+                
+                # Display wavelet coefficients
+                import numpy as np
+                wavelet_display = np.uint8(np.clip(np.abs(wavelet_result), 0, 255))
+                self.preview_label.setPixmap(
+                    self.cv_to_pixmap(wavelet_display).scaled(
+                        self.preview_label.size(), 
+                        Qt.AspectRatioMode.KeepAspectRatio
+                    )
+                )
+                
                 info_text = f"""COMPRESSION: {choice}
 ━━━━━━━━━━━━━━━━━━━━
 Method: Wavelet Transform
 Level: {level}
 Output Shape: {wavelet_result.shape}
+
+Coefficient Stats:
+Min: {wavelet_result.min():.2f}
+Max: {wavelet_result.max():.2f}
+Mean: {wavelet_result.mean():.2f}
+
+Preview shows: Absolute wavelet coefficients
 """
                 self.info_display.setText(info_text)
                 
         except Exception as e:
-            self.info_display.setText(f"Compression error: {str(e)}")
+            self.info_display.setText(f"Compression error: {str(e)}\n\nPlease check your parameters and try again.")
 
     def show_compression_stats(self, stats, method):
         info_text = f"""COMPRESSION: {method}
@@ -757,90 +1095,42 @@ Space Saving: {stats['space_saving']}%
         self.info_display.setText(info_text)
 
     def save_image(self):
-        if self.compression_method:
-            path, selected_filter = QFileDialog.getSaveFileName(
-                self, 
-                "Save Compressed/Decompressed Image", 
-                "", 
-                "Image Files (*.png *.jpg *.bmp);;NumPy Array (*.npy);;Text File (*.txt)"
-            )
-            if not path:
-                return
-                
-            try:
-                if path.endswith('.npy') or path.endswith('.txt'):
-                    if path.endswith('.npy'):
-                        if isinstance(self.compressed_data, np.ndarray):
-                            np.save(path, self.compressed_data)
-                        elif isinstance(self.compressed_data, tuple):
-                            np.save(path, self.compressed_data[0])
-                        else:
-                            np.save(path, np.array(self.compressed_data))
-                    else:
-                        with open(path, 'w') as f:
-                            f.write(str(self.compressed_data))
-                else:
-                    if not any(path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.bmp']):
-                        if 'Image Files' in selected_filter or 'PNG' in selected_filter:
-                            path += '.png'
-                        elif 'JPEG' in selected_filter:
-                            path += '.jpg'
-                        elif 'BMP' in selected_filter:
-                            path += '.bmp'
-                        else:
-                            path += '.png'
-                    
-                    img_to_save = None
-                    
-                    if self.compression_method in ["dct", "bitplane", "predictive", "wavelet"]:
-                        if self.compression_method == "dct":
-                            img_to_save = np.uint8(np.clip(self.compressed_data, 0, 255))
-                        elif self.compression_method == "bitplane":
-                            reconstructed = np.zeros_like(self.compressed_data[0], dtype=np.uint8)
-                            for bit_position, plane in enumerate(self.compressed_data):
-                                reconstructed += (plane << bit_position)
-                            img_to_save = reconstructed
-                        elif self.compression_method == "predictive":
-                            residual, predicted = self.compressed_data
-                            reconstructed = np.clip(predicted + residual, 0, 255).astype(np.uint8)
-                            img_to_save = reconstructed
-                        elif self.compression_method == "wavelet":
-                            img_to_save = np.uint8(np.clip(self.compressed_data, 0, 255))
-                    else:
-                        img_to_save = self.transformed_img if self.transformed_img is not None else (
-                            self.resized_img if self.resized_img is not None else self.filtered_img
-                        )
-                    
-                    if img_to_save is not None:
-                        cv2.imwrite(path, img_to_save)
-                    else:
-                        print("No image data available to save")
-                        
-            except Exception as e:
-                print(f"Save error: {e}")
-        else:
-            img = self.transformed_img if self.transformed_img is not None else (
-                self.resized_img if self.resized_img is not None else self.filtered_img
-            )
-            if img is None:
-                return
+        if not self.current_image_path:
+            return
 
-            path, selected_filter = QFileDialog.getSaveFileName(self, "Save Image As", "", "PNG (*.png);;JPEG (*.jpg);;BMP (*.bmp)")
-            if path:
-                if not any(path.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.bmp']):
-                    if 'PNG' in selected_filter:
-                        path += '.png'
-                    elif 'JPEG' in selected_filter:
-                        path += '.jpg'
-                    elif 'BMP' in selected_filter:
-                        path += '.bmp'
-                    else:
-                        path += '.png'
-                
-                try:
-                    cv2.imwrite(path, img)
-                except Exception as e:
-                    print(f"Save error: {e}")
+        path, selected_filter = QFileDialog.getSaveFileName(
+            self, 
+            "Save Image", 
+            "", 
+            "JPG (*.jpg);;NumPy Array (*.npy)"
+        )
+        if not path:
+            return
+
+        current_img = self.transformed_img or self.resized_img or self.filtered_img
+
+        if path.endswith('.npy'):
+            if self.compressed_data is not None:
+                if isinstance(self.compressed_data, tuple):
+                    np.save(path, self.compressed_data[0])
+                else:
+                    np.save(path, self.compressed_data)
+            elif current_img is not None:
+                np.save(path, current_img)
+        else:
+            if not path.lower().endswith('.jpg'):
+                path += '.jpg'
+            if self.compressed_data is not None:
+                if self.compression_method in ["bitplane", "predictive", "wavelet", "dct"]:
+                    img_to_save = np.uint8(np.clip(self.compressed_data, 0, 255))
+                else:
+                    img_to_save = current_img
+            else:
+                img_to_save = current_img
+
+            if img_to_save is not None:
+                import cv2
+                cv2.imwrite(path, img_to_save)
 
 app = QApplication(sys.argv)
 window = ImageDropWindow()
