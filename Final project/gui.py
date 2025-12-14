@@ -816,23 +816,14 @@ Channels: {channels}
                 stats = comp.get_compression_stats(encoded)
                 self.compressed_data = (encoded, huff_map)
                 self.compression_method = "huffman"
-                
-                # Show encoded string preview
                 preview = encoded[:200] + "..." if len(encoded) > 200 else encoded
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Original Bits: {stats['original_bits']}
-Compressed Bits: {stats['compressed_bits']}
-Compression Ratio: {stats['compression_ratio']}:1
-Space Saving: {stats['space_saving']}%
-
-Huffman Codes (sample):
-{str(dict(list(huff_map.items())[:10]))}
-
-Encoded Data (preview):
-{preview}
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(
+                    f"COMPRESSION: Huffman\nOriginal Bits: {stats['original_bits']}\n"
+                    f"Compressed Bits: {stats['compressed_bits']}\n"
+                    f"Compression Ratio: {stats['compression_ratio']}:1\n"
+                    f"Space Saving: {stats['space_saving']}%\nHuffman Codes (sample):\n"
+                    f"{str(dict(list(huff_map.items())[:10]))}\nEncoded Data (preview): {preview}"
+                )
                 
             elif choice == "Golomb-Rice":
                 M = int(self.compress_input1.text()) if self.compress_input1.text() else 4
@@ -841,258 +832,104 @@ Encoded Data (preview):
                 stats = comp.get_compression_stats(encoded_str)
                 self.compressed_data = encoded
                 self.compression_method = "golomb"
-                
                 preview = encoded_str[:200] + "..." if len(encoded_str) > 200 else encoded_str
-                original_size_kb = stats['original_bits'] / 8 / 1024
-                compressed_size_kb = stats['compressed_bits'] / 8 / 1024
-                
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Original Size: {original_size_kb:.2f} KB
-Compressed Size: {compressed_size_kb:.2f} KB
-Original Bits: {stats['original_bits']}
-Compressed Bits: {stats['compressed_bits']}
-Compression Ratio: {stats['compression_ratio']}:1
-Space Saving: {stats['space_saving']}%
-M Parameter: {M}
-
-Encoded Data (preview):
-{preview}
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(
+                    f"COMPRESSION: Golomb-Rice\nM: {M}\nOriginal Bits: {stats['original_bits']}\n"
+                    f"Compressed Bits: {stats['compressed_bits']}\nCompression Ratio: {stats['compression_ratio']}:1\n"
+                    f"Space Saving: {stats['space_saving']}%\nEncoded Data (preview): {preview}"
+                )
                 
             elif choice == "Arithmetic":
                 encoded, cum = comp.arithmetic()
                 self.compressed_data = (encoded, cum)
                 self.compression_method = "arithmetic"
-                
-                original_size_kb = (len(comp.data) * 8) / 8 / 1024
-                compressed_size_kb = 8 / 8 / 1024
-                compression_ratio = (len(comp.data) * 8) / 64
-                space_saving = ((len(comp.data) * 8 - 64) / (len(comp.data) * 8) * 100)
-                
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Original Size: {original_size_kb:.2f} KB
-Compressed Size: {compressed_size_kb:.4f} KB
-Method: Arithmetic Coding
-Compression Ratio: {compression_ratio:.2f}:1
-Space Saving: {space_saving:.2f}%
-Encoded Value: {encoded:.15f}
-
-Probability Ranges (sample):
-{str(dict(list(cum.items())[:10]))}
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(
+                    f"COMPRESSION: Arithmetic\nEncoded Value: {encoded:.15f}\n"
+                    f"Sample Probability Ranges: {str(dict(list(cum.items())[:10]))}"
+                )
                 
             elif choice == "LZW":
                 result, dict_size = comp.lzw()
                 stats = comp.get_compression_stats(result)
                 self.compressed_data = (result, dict_size)
                 self.compression_method = "lzw"
-                
                 preview = str(result[:50]) + "..." if len(result) > 50 else str(result)
-                original_size_kb = stats['original_bits'] / 8 / 1024
-                compressed_size_kb = stats['compressed_bits'] / 8 / 1024
-                
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Original Size: {original_size_kb:.2f} KB
-Compressed Size: {compressed_size_kb:.2f} KB
-Original Bits: {stats['original_bits']}
-Compressed Bits: {stats['compressed_bits']}
-Compression Ratio: {stats['compression_ratio']}:1
-Space Saving: {stats['space_saving']}%
-Final Dictionary Size: {dict_size}
-
-Encoded Indices (preview):
-{preview}
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(
+                    f"COMPRESSION: LZW\nOriginal Bits: {stats['original_bits']}\n"
+                    f"Compressed Bits: {stats['compressed_bits']}\nCompression Ratio: {stats['compression_ratio']}:1\n"
+                    f"Space Saving: {stats['space_saving']}%\nEncoded Indices (preview): {preview}"
+                )
                 
             elif choice == "RLE":
                 encoded = comp.rle()
                 stats = comp.get_compression_stats(encoded)
                 self.compressed_data = encoded
                 self.compression_method = "rle"
-                
                 preview = str(encoded[:20]) + "..." if len(encoded) > 20 else str(encoded)
-                original_size_kb = stats['original_bits'] / 8 / 1024
-                compressed_size_kb = stats['compressed_bits'] / 8 / 1024
-                
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Original Size: {original_size_kb:.2f} KB
-Compressed Size: {compressed_size_kb:.2f} KB
-Original Bits: {stats['original_bits']}
-Compressed Bits: {stats['compressed_bits']}
-Compression Ratio: {stats['compression_ratio']}:1
-Space Saving: {stats['space_saving']}%
-
-Run-Length Pairs (preview):
-{preview}
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(
+                    f"COMPRESSION: RLE\nOriginal Bits: {stats['original_bits']}\n"
+                    f"Compressed Bits: {stats['compressed_bits']}\nCompression Ratio: {stats['compression_ratio']}:1\n"
+                    f"Space Saving: {stats['space_saving']}%\nRun-Length Pairs (preview): {preview}"
+                )
                 
             elif choice == "Symbol-Based":
                 encoded, symbol_map = comp.symbol_based()
                 stats = comp.get_compression_stats(encoded)
                 self.compressed_data = (encoded, symbol_map)
                 self.compression_method = "symbol"
-                
                 preview = str(encoded[:100]) + "..." if len(encoded) > 100 else str(encoded)
-                original_size_kb = stats['original_bits'] / 8 / 1024
-                compressed_size_kb = stats['compressed_bits'] / 8 / 1024
-                
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Original Size: {original_size_kb:.2f} KB
-Compressed Size: {compressed_size_kb:.2f} KB
-Original Bits: {stats['original_bits']}
-Compressed Bits: {stats['compressed_bits']}
-Compression Ratio: {stats['compression_ratio']}:1
-Space Saving: {stats['space_saving']}%
-
-Symbol Map (sample):
-{str(dict(list(symbol_map.items())[:10]))}
-
-Encoded Data (preview):
-{preview}
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(
+                    f"COMPRESSION: Symbol-Based\nOriginal Bits: {stats['original_bits']}\n"
+                    f"Compressed Bits: {stats['compressed_bits']}\nCompression Ratio: {stats['compression_ratio']}:1\n"
+                    f"Space Saving: {stats['space_saving']}%\nSymbol Map Sample: {str(dict(list(symbol_map.items())[:10]))}\n"
+                    f"Encoded Data (preview): {preview}"
+                )
                 
             elif choice == "Bit-Plane":
                 bit_planes = comp.bit_plane()
                 self.compressed_data = bit_planes
                 self.compression_method = "bitplane"
-                
-                # Display first bit plane
                 self.preview_label.setPixmap(
-                    self.cv_to_pixmap(bit_planes[0] * 255).scaled(
-                        self.preview_label.size(), 
-                        Qt.AspectRatioMode.KeepAspectRatio
-                    )
+                    self.cv_to_pixmap(bit_planes[0]*255).scaled(self.preview_label.size(), Qt.AspectRatioMode.KeepAspectRatio)
                 )
-                
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Method: Bit-Plane Slicing
-Planes Generated: {len(bit_planes)}
-Plane Shape: {bit_planes[0].shape}
-
-Preview showing: Bit Plane 0 (LSB)
-Bit plane matrices can be saved individually
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(f"COMPRESSION: Bit-Plane\nPlanes Generated: {len(bit_planes)}\nPreview shows Plane 0")
                 
             elif choice == "DCT":
                 block_size = int(self.compress_input1.text()) if self.compress_input1.text() else 8
                 dct_result = comp.dct_blocks(block_size)
                 self.compressed_data = dct_result
                 self.compression_method = "dct"
-                
-                # Display DCT coefficients as image
                 dct_display = np.uint8(np.clip(np.abs(dct_result), 0, 255))
                 self.preview_label.setPixmap(
-                    self.cv_to_pixmap(dct_display).scaled(
-                        self.preview_label.size(), 
-                        Qt.AspectRatioMode.KeepAspectRatio
-                    )
+                    self.cv_to_pixmap(dct_display).scaled(self.preview_label.size(), Qt.AspectRatioMode.KeepAspectRatio)
                 )
-                
-                import numpy as np
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Method: DCT Transform
-Block Size: {block_size}x{block_size}
-Output Shape: {dct_result.shape}
-
-Coefficient Stats:
-Min: {dct_result.min():.2f}
-Max: {dct_result.max():.2f}
-Mean: {dct_result.mean():.2f}
-
-Preview shows: Absolute DCT coefficients
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(f"COMPRESSION: DCT\nBlock Size: {block_size}x{block_size}\nOutput Shape: {dct_result.shape}")
                 
             elif choice == "Predictive":
                 mode = self.compress_input1.text() if self.compress_input1.text() else 'left'
                 residual, predicted = comp.predictive(mode)
                 self.compressed_data = (residual, predicted)
                 self.compression_method = "predictive"
-                
-                # Display residual image
-                residual_display = np.uint8(np.clip(residual + 128, 0, 255))
+                residual_display = np.uint8(np.clip(residual+128, 0, 255))
                 self.preview_label.setPixmap(
-                    self.cv_to_pixmap(residual_display).scaled(
-                        self.preview_label.size(), 
-                        Qt.AspectRatioMode.KeepAspectRatio
-                    )
+                    self.cv_to_pixmap(residual_display).scaled(self.preview_label.size(), Qt.AspectRatioMode.KeepAspectRatio)
                 )
-                
-                import numpy as np
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Method: Predictive Coding
-Mode: {mode}
-
-Residual Stats:
-Min: {residual.min()}
-Max: {residual.max()}
-Mean: {residual.mean():.2f}
-Std Dev: {residual.std():.2f}
-
-Preview shows: Residual errors (offset +128)
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(f"COMPRESSION: Predictive\nMode: {mode}\nResidual Min: {residual.min()} Max: {residual.max()}")
                 
             elif choice == "Wavelet":
                 level = int(self.compress_input1.text()) if self.compress_input1.text() else 1
                 wavelet_result = comp.wavelet(level)
                 self.compressed_data = wavelet_result
                 self.compression_method = "wavelet"
-                
-                # Display wavelet coefficients
-                import numpy as np
                 wavelet_display = np.uint8(np.clip(np.abs(wavelet_result), 0, 255))
                 self.preview_label.setPixmap(
-                    self.cv_to_pixmap(wavelet_display).scaled(
-                        self.preview_label.size(), 
-                        Qt.AspectRatioMode.KeepAspectRatio
-                    )
+                    self.cv_to_pixmap(wavelet_display).scaled(self.preview_label.size(), Qt.AspectRatioMode.KeepAspectRatio)
                 )
-                
-                info_text = f"""COMPRESSION: {choice}
-━━━━━━━━━━━━━━━━━━━━
-Method: Wavelet Transform
-Level: {level}
-Output Shape: {wavelet_result.shape}
-
-Coefficient Stats:
-Min: {wavelet_result.min():.2f}
-Max: {wavelet_result.max():.2f}
-Mean: {wavelet_result.mean():.2f}
-
-Preview shows: Absolute wavelet coefficients
-"""
-                self.info_display.setText(info_text)
+                self.info_display.setText(f"COMPRESSION: Wavelet\nLevel: {level}\nOutput Shape: {wavelet_result.shape}")
                 
         except Exception as e:
-            self.info_display.setText(f"Compression error: {str(e)}\n\nPlease check your parameters and try again.")
+            self.info_display.setText(f"Compression error: {str(e)}")
 
-    def show_compression_stats(self, stats, method):
-        info_text = f"""COMPRESSION: {method}
-━━━━━━━━━━━━━━━━━━━━
-Original Bits: {stats['original_bits']}
-Compressed Bits: {stats['compressed_bits']}
-Compression Ratio: {stats['compression_ratio']}:1
-Space Saving: {stats['space_saving']}%
-"""
-        if 'dictionary_size' in stats:
-            info_text += f"Dictionary Size: {stats['dictionary_size']}\n"
-        
-        self.info_display.setText(info_text)
 
     def save_image(self):
         if not self.current_image_path:
